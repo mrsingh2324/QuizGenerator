@@ -1,0 +1,240 @@
+:root {
+  font-family: "Segoe UI", sans-serif;
+  color: #f7fbff;
+  background:
+    radial-gradient(circle at top, rgba(255, 209, 102, 0.25), transparent 20rem),
+    linear-gradient(160deg, #06121f 0%, #123456 55%, #0b1d35 100%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+.player-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+}
+
+.join-card,
+.live-card,
+.leaderboard-card {
+  width: min(100%, 980px);
+  border-radius: 28px;
+  padding: 2rem;
+  background: rgba(4, 13, 26, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.28);
+}
+
+.animate-pop {
+  animation: pop-in 420ms ease both;
+}
+
+.join-card {
+  width: min(100%, 560px);
+}
+
+.join-form {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.join-form input,
+.join-form button {
+  border-radius: 18px;
+  border: 0;
+  padding: 1rem 1.1rem;
+}
+
+.join-form input {
+  background: rgba(255, 255, 255, 0.95);
+  color: #172033;
+}
+
+.join-form button {
+  background: #ffd166;
+  color: #172033;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.live-topbar,
+.leaderboard-header,
+.question-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+}
+
+.timer-badge,
+.phase-chip {
+  border-radius: 999px;
+  padding: 0.65rem 1rem;
+  background: rgba(255, 209, 102, 0.16);
+  border: 1px solid rgba(255, 209, 102, 0.5);
+}
+
+.question-meta {
+  margin: 1.25rem 0;
+  color: rgba(247, 251, 255, 0.78);
+}
+
+.question-title {
+  margin: 0 0 1.5rem;
+  font-size: clamp(1.8rem, 4vw, 3rem);
+  line-height: 1.1;
+}
+
+.option-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.option-card {
+  text-align: left;
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  padding: 1.2rem;
+  cursor: pointer;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.option-card.selected {
+  background: rgba(255, 209, 102, 0.2);
+  border-color: rgba(255, 209, 102, 0.7);
+  transform: translateY(-2px);
+}
+
+.summary-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  margin-top: 1rem;
+}
+
+.results-bar-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.result-bar-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.result-bar-label {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.75);
+  font-weight: 500;
+}
+
+.result-bar-track {
+  height: 28px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  overflow: hidden;
+  position: relative;
+}
+
+.result-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, rgba(255, 209, 102, 0.6), rgba(255, 209, 102, 0.9));
+  border-radius: 14px;
+  min-width: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 12px;
+  transition: width 0.4s ease;
+}
+
+.result-bar-percentage {
+  font-weight: 700;
+  font-size: 0.8rem;
+  color: #172033;
+  white-space: nowrap;
+}
+
+.result-bar-count {
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.5);
+  margin-left: 4px;
+}
+
+.leaderboard-list {
+  display: grid;
+  gap: 0.85rem;
+  margin-top: 1.5rem;
+}
+
+.leaderboard-row {
+  display: grid;
+  grid-template-columns: 80px 1fr 160px 140px;
+  gap: 1rem;
+  align-items: center;
+  padding: 1rem 1.1rem;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.support-copy,
+.eyebrow {
+  color: rgba(247, 251, 255, 0.75);
+}
+
+.eyebrow {
+  margin: 0 0 0.35rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.72rem;
+}
+
+.ghost-link {
+  color: #ffd166;
+  text-decoration: none;
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.98) translateY(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+@media (max-width: 768px) {
+  .option-grid,
+  .leaderboard-row {
+    grid-template-columns: 1fr;
+  }
+}

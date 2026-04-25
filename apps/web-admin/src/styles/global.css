@@ -1,0 +1,244 @@
+:root {
+  font-family: "Segoe UI", sans-serif;
+  color: #172033;
+  background:
+    radial-gradient(circle at top left, rgba(255, 204, 102, 0.35), transparent 24rem),
+    linear-gradient(160deg, #f7f5ef 0%, #eef4ff 100%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+.admin-shell {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  min-height: 100vh;
+}
+
+.admin-sidebar {
+  padding: 2rem;
+  background: rgba(11, 35, 64, 0.95);
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.admin-nav {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.nav-chip {
+  padding: 0.8rem 1rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.nav-chip.active {
+  background: #ffd166;
+  color: #172033;
+}
+
+.admin-main {
+  padding: 2rem;
+}
+
+.page-stack {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.hero-card,
+.panel,
+.stat-card {
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(23, 32, 51, 0.08);
+  box-shadow: 0 20px 60px rgba(18, 40, 76, 0.08);
+}
+
+.hero-card {
+  padding: 1.6rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.status-pill {
+  padding: 0.75rem 1rem;
+  border-radius: 999px;
+  background: #172033;
+  color: #fff;
+}
+
+.stats-grid,
+.dashboard-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.stats-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.dashboard-grid {
+  grid-template-columns: 1.1fr 1fr;
+}
+
+.dashboard-grid-wide {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.stat-card {
+  padding: 1.2rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.stat-card strong {
+  font-size: 2rem;
+}
+
+.panel {
+  padding: 1.5rem;
+}
+
+.panel-heading {
+  margin-bottom: 1rem;
+}
+
+.field {
+  display: grid;
+  gap: 0.45rem;
+  margin-bottom: 1rem;
+}
+
+.field input,
+.field textarea,
+.field select {
+  width: 100%;
+  border: 1px solid rgba(23, 32, 51, 0.15);
+  border-radius: 16px;
+  padding: 0.95rem 1rem;
+  background: #fff;
+}
+
+.inline-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.primary-button,
+.secondary-button {
+  border: 0;
+  border-radius: 16px;
+  padding: 0.9rem 1.15rem;
+  cursor: pointer;
+}
+
+.primary-button {
+  background: #172033;
+  color: #fff;
+}
+
+.secondary-button {
+  background: #ffd166;
+  color: #172033;
+}
+
+.quiz-list {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.quiz-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  border-radius: 18px;
+  background: #f5f8ff;
+}
+
+.empty-state {
+  padding: 1.4rem;
+  border-radius: 18px;
+  background: #f5f8ff;
+}
+
+.qr-panel {
+  display: grid;
+  gap: 1rem;
+  justify-items: start;
+}
+
+.qr-image {
+  width: 200px;
+  height: 200px;
+  border-radius: 18px;
+  background: #fff;
+  padding: 0.75rem;
+}
+
+.ghost-link-dark {
+  color: #172033;
+  text-decoration: none;
+}
+
+.animate-rise {
+  animation: rise-in 500ms ease both;
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.eyebrow {
+  margin: 0 0 0.35rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.72rem;
+  color: #687389;
+}
+
+h1,
+h2,
+h3,
+h4,
+p {
+  margin: 0;
+}
+
+@media (max-width: 960px) {
+  .admin-shell,
+  .dashboard-grid,
+  .dashboard-grid-wide,
+  .stats-grid,
+  .inline-fields {
+    grid-template-columns: 1fr;
+  }
+}
