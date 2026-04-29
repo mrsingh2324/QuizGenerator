@@ -1,8 +1,48 @@
-node_modules
-.DS_Store
+# Dependencies
+node_modules/
+*/node_modules/
+
+# Environment files
 .env
-dist
-build
-coverage
+.env.*
+!.env.example
+*/.env
+*/.env.*
+!*/.env.example
+
+# Build output
+dist/
+build/
+*/dist/
+*/build/
+
+# Test and coverage output
+coverage/
+*/coverage/
+
+# Logs
+*.log
 npm-debug.log*
-package-lock.json
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Local caches
+.npm-cache/
+.cache/
+.vite/
+*/.vite/
+
+# OS and editor files
+.DS_Store
+*/.DS_Store
+.idea/
+.vscode/
+
+# Local archives and generated review bundles
+*.zip
+*.tar
+*.tar.gz
+
+# Agent worktrees and local scratch state
+.claude/worktrees/

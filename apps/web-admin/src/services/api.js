@@ -34,8 +34,16 @@ export async function createAdmin(payload) {
   });
 }
 
+export async function ensureDemoAdmin() {
+  return request("/api/users/demo-admin");
+}
+
 export async function fetchQuizzes() {
   return request("/api/quizzes");
+}
+
+export async function fetchQuizById(quizId) {
+  return request(`/api/quizzes/${quizId}`);
 }
 
 export async function createQuiz(payload) {
@@ -55,6 +63,60 @@ export async function generateQuizFromTopic(payload) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify(payload),
+  });
+}
+
+export async function publishQuiz(quizId) {
+  return request(`/api/quizzes/${quizId}/publish`, {
+    method: "POST",
+  });
+}
+
+export async function updateQuizSettings(quizId, payload) {
+  return request(`/api/quizzes/${quizId}/settings`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function fetchQuizLaunchHistory(quizId) {
+  return request(`/api/live-sessions/quiz/${quizId}/history`);
+}
+
+export async function launchQuizAgain(quizId, payload) {
+  return request(`/api/live-sessions/quiz/${quizId}/launch-again`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function fetchQuizReport(quizId) {
+  return request(`/api/live-sessions/quiz/${quizId}/report`);
+}
+
+export function getQuizReportCsvUrl(quizId) {
+  return `${API_URL}/api/live-sessions/quiz/${quizId}/report.csv`;
+}
+
+export async function updateQuestion(quizId, questionId, payload) {
+  return request(`/api/quizzes/${quizId}/questions/${questionId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteQuestion(quizId, questionId) {
+  return request(`/api/quizzes/${quizId}/questions/${questionId}`, {
+    method: "DELETE",
   });
 }
 

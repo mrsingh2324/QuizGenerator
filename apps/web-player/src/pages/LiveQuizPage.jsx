@@ -1,30 +1,53 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { useQuiz } from "../context/QuizContext";
 import { getSocket } from "../services/socket";
 
 function LiveQuizPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const {
     attemptId,
     joinCode,
     lastSummary,
+    participants,
     phase,
     playerName,
     question,
     remainingSeconds,
     setLastSummary,
     setLeaderboard,
+    setParticipants,
     setPhase,
     setQuestion,
     setRemainingSeconds,
+    theme,
   } = useQuiz();
   const [selectedOption, setSelectedOption] = useState(null);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [feedback, setFeedback] = useState("Waiting for the next question...");
+  const playerStyle = {
+    "--player-primary": theme.primaryColor || "#2563eb",
+    "--player-accent": theme.accentColor || "#f59e0b",
+    "--player-bg": theme.backgroundColor || "#0f172a",
+    fontFamily: theme.fontFamily || "Inter",
+  };
 
   useEffect(() => {
+    if (joinCode && attemptId) {
+      return;
+    }
+
+    const queryCode = searchParams.get("code");
+    navigate(queryCode ? `/?code=${queryCode}` : "/", { replace: true });
+  }, [attemptId, joinCode, navigate, searchParams]);
+
+  useEffect(() => {
+    if (!joinCode || !attemptId) {
+      return undefined;
+    }
+
     const socket = getSocket();
 
     function handleQuestionBroadcast(payload) {
@@ -55,6 +78,13 @@ function LiveQuizPage() {
       setLeaderboard(payload);
     }
 
+    function handleParticipantJoined(payload) {
+      setParticipants(payload.participants || []);
+      if (phase === "waiting_for_players") {
+        setFeedback(`${payload.name || "A player"} joined the lobby.`);
+      }
+    }
+
     function handleFinished(payload) {
       if (payload.leaderboard) {
         setLeaderboard(payload.leaderboard);
@@ -67,6 +97,7 @@ function LiveQuizPage() {
     socket.on("timer:sync", handleTimerSync);
     socket.on("question:summary", handleSummary);
     socket.on("leaderboard:update", handleLeaderboard);
+    socket.on("room:participant-joined", handleParticipantJoined);
     socket.on("quiz:finished", handleFinished);
 
     return () => {
@@ -75,9 +106,19 @@ function LiveQuizPage() {
       socket.off("timer:sync", handleTimerSync);
       socket.off("question:summary", handleSummary);
       socket.off("leaderboard:update", handleLeaderboard);
+      socket.off("room:participant-joined", handleParticipantJoined);
       socket.off("quiz:finished", handleFinished);
     };
-  }, [navigate, setLastSummary, setLeaderboard, setPhase, setQuestion, setRemainingSeconds]);
+  }, [
+    navigate,
+    phase,
+    setLastSummary,
+    setLeaderboard,
+    setParticipants,
+    setPhase,
+    setQuestion,
+    setRemainingSeconds,
+  ]);
 
   function handleSubmit(optionIndex) {
       if (!joinCode || !attemptId || !question?.id) {
@@ -108,12 +149,55 @@ function LiveQuizPage() {
       );
     }
 
+  if (phase === "waiting_for_players") {
+    return (
+      <main className={`player-shell themed-player player-${theme.playerStyle || "vibrant"}`} style={playerStyle}>
+        <section className="lobby-card animate-pop">
+          <div className="live-topbar">
+            <div>
+              <p className="eyebrow">{theme.logoText || "Lobby"}</p>
+              <h1>{joinCode || "Waiting"}</h1>
+            </div>
+            <div className="phase-chip">{participants.length} joined</div>
+          </div>
+
+          <div className="lobby-body">
+            <div>
+              <h2>Host will start soon</h2>
+              <p className="support-copy">
+                You are in as {playerName || "Guest"}. Keep this tab open.
+              </p>
+              {theme.coverImageUrl ? (
+                <img className="player-cover-image" src={theme.coverImageUrl} alt="Quiz cover" />
+              ) : null}
+            </div>
+
+            <div className="participant-list">
+              {participants.length === 0 ? (
+                <p className="participant-row">Waiting for players...</p>
+              ) : (
+                participants.map((participant, index) => (
+                  <p className="participant-row" key={`${participant}-${index}`}>
+                    <span>{index + 1}</span>
+                    {participant}
+                  </p>
+                ))
+              )}
+            </div>
+          </div>
+
+          <p className="support-copy">{feedback}</p>
+        </section>
+      </main>
+    );
+  }
+
   return (
-    <main className="player-shell">
+    <main className={`player-shell themed-player player-${theme.playerStyle || "vibrant"}`} style={playerStyle}>
       <section className="live-card animate-pop">
         <div className="live-topbar">
           <div>
-            <p className="eyebrow">Player</p>
+            <p className="eyebrow">{theme.logoText || "Player"}</p>
             <h1>{playerName || "Guest"}</h1>
           </div>
           <div className="timer-badge">{remainingSeconds}s</div>
@@ -127,6 +211,9 @@ function LiveQuizPage() {
         </div>
 
         <h2 className="question-title">{question?.prompt || "Waiting for host..."}</h2>
+        {theme.coverImageUrl && phase === "waiting_for_players" ? (
+          <img className="player-cover-image" src={theme.coverImageUrl} alt="Quiz cover" />
+        ) : null}
 
         <div className="option-grid">
           {(question?.options || []).map((option, index) => (

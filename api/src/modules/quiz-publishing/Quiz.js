@@ -58,6 +58,102 @@ const quizSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    theme: {
+      preset: {
+        type: String,
+        default: "aurora",
+      },
+      primaryColor: {
+        type: String,
+        default: "#2563eb",
+      },
+      accentColor: {
+        type: String,
+        default: "#f59e0b",
+      },
+      backgroundColor: {
+        type: String,
+        default: "#0f172a",
+      },
+      fontFamily: {
+        type: String,
+        default: "Inter",
+      },
+      logoText: {
+        type: String,
+        default: "Quiz Live",
+      },
+      coverImageUrl: {
+        type: String,
+        default: "",
+      },
+      playerStyle: {
+        type: String,
+        enum: ["focus", "vibrant", "calm"],
+        default: "vibrant",
+      },
+    },
+    sharing: {
+      visibility: {
+        type: String,
+        enum: ["public", "private"],
+        default: "public",
+      },
+      accessPassword: {
+        type: String,
+        trim: true,
+        default: "",
+      },
+      availableFrom: {
+        type: Date,
+        default: null,
+      },
+      availableUntil: {
+        type: Date,
+        default: null,
+      },
+      maxParticipants: {
+        type: Number,
+        min: 0,
+        default: 0,
+      },
+      reusableLink: {
+        type: Boolean,
+        default: true,
+      },
+      customSlug: {
+        type: String,
+        trim: true,
+        lowercase: true,
+        sparse: true,
+      },
+      embedEnabled: {
+        type: Boolean,
+        default: true,
+      },
+    },
+    integrations: {
+      googleSheetsEnabled: {
+        type: Boolean,
+        default: true,
+      },
+      googleDriveImportUrl: {
+        type: String,
+        trim: true,
+        default: "",
+      },
+      webhookUrl: {
+        type: String,
+        trim: true,
+        default: "",
+      },
+      notificationEmail: {
+        type: String,
+        trim: true,
+        lowercase: true,
+        default: "",
+      },
+    },
   },
   {
     timestamps: true,

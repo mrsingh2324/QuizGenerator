@@ -41,10 +41,14 @@ function normalizeUser(user) {
     };
   }
 
+  const email = user.email || "";
+  const isInternalParticipantEmail =
+    email.startsWith("participant-") && email.endsWith("@quiz.local");
+
   return {
     id: String(user._id || user.id),
     name: user.name,
-    email: user.email || "",
+    email: isInternalParticipantEmail ? "" : email,
     role: user.role,
     avatar: user.avatar || "",
   };
@@ -67,6 +71,32 @@ function normalizeQuiz(quiz, options = {}) {
     totalQuestions: quiz.totalQuestions || quiz.questions?.length || 0,
     questionTimeLimitSeconds: quiz.questionTimeLimitSeconds || 30,
     resultsWindowSeconds: quiz.resultsWindowSeconds || 5,
+    theme: {
+      preset: quiz.theme?.preset || "aurora",
+      primaryColor: quiz.theme?.primaryColor || "#2563eb",
+      accentColor: quiz.theme?.accentColor || "#f59e0b",
+      backgroundColor: quiz.theme?.backgroundColor || "#0f172a",
+      fontFamily: quiz.theme?.fontFamily || "Inter",
+      logoText: quiz.theme?.logoText || "Quiz Live",
+      coverImageUrl: quiz.theme?.coverImageUrl || "",
+      playerStyle: quiz.theme?.playerStyle || "vibrant",
+    },
+    sharing: {
+      visibility: quiz.sharing?.visibility || "public",
+      hasPassword: Boolean(quiz.sharing?.accessPassword),
+      availableFrom: quiz.sharing?.availableFrom || null,
+      availableUntil: quiz.sharing?.availableUntil || null,
+      maxParticipants: quiz.sharing?.maxParticipants || 0,
+      reusableLink: quiz.sharing?.reusableLink !== false,
+      customSlug: quiz.sharing?.customSlug || "",
+      embedEnabled: quiz.sharing?.embedEnabled !== false,
+    },
+    integrations: {
+      googleSheetsEnabled: quiz.integrations?.googleSheetsEnabled !== false,
+      googleDriveImportUrl: quiz.integrations?.googleDriveImportUrl || "",
+      webhookUrl: quiz.integrations?.webhookUrl || "",
+      notificationEmail: quiz.integrations?.notificationEmail || "",
+    },
     createdBy: normalizeUser(quiz.createdBy),
     questions: includeQuestions
       ? (quiz.questions || []).map((question, index) =>
@@ -125,6 +155,8 @@ function normalizeLiveSession(session) {
     participantCount: session.participantCount || 0,
     startedAt: session.startedAt || null,
     endedAt: session.endedAt || null,
+    createdAt: session.createdAt || null,
+    updatedAt: session.updatedAt || null,
   };
 }
 

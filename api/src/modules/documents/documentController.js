@@ -1,6 +1,21 @@
 const { analyzeDocumentText } = require("../../services/aiService");
 const { extractTextFromFile } = require("./textExtractionService");
 const UploadedDocument = require("./UploadedDocument");
+const Question = require("../question-bank/Question");
+const Quiz = require("../quiz-publishing/Quiz");
+const generateJoinCode = require("../quiz-publishing/generateJoinCode");
+
+async function generateUniqueJoinCode() {
+  let joinCode = generateJoinCode();
+  let existing = await Quiz.findOne({ joinCode });
+
+  while (existing) {
+    joinCode = generateJoinCode();
+    existing = await Quiz.findOne({ joinCode });
+  }
+
+  return joinCode;
+}
 
 async function createDocument(req, res, next) {
   try {
@@ -114,9 +129,37 @@ async function uploadDocumentAndAnalyze(req, res, next) {
         action: aiResult.action,
       });
 
+      let draftQuiz = null;
+
+      if (Array.isArray(aiResult.questions) && aiResult.questions.length > 0) {
+        const createdQuestions = await Question.insertMany(
+          aiResult.questions.map((question) => ({
+            ...question,
+            sourceType: aiResult.containsQuestions ? "document" : "ai_generated",
+          }))
+        );
+        const joinCode = await generateUniqueJoinCode();
+
+        draftQuiz = await Quiz.create({
+          title: title || document.title,
+          description: `Quiz generated from document: ${document.fileName}`,
+          category: "ai-generated",
+          createdBy: admin,
+          questions: createdQuestions.map((question) => question._id),
+          joinCode,
+          status: "draft",
+          totalQuestions: createdQuestions.length,
+          questionTimeLimitSeconds: 20,
+          resultsWindowSeconds: 5,
+        });
+
+        draftQuiz = await Quiz.findById(draftQuiz._id).populate("questions");
+      }
+
       return res.status(201).json({
         document,
         aiResult,
+        draftQuiz,
       });
     } catch (error) {
       console.error("[Document Upload] AI analysis failed:", {

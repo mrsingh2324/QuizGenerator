@@ -27,8 +27,30 @@ input {
   padding: 1.5rem;
 }
 
+.themed-player {
+  background:
+    radial-gradient(circle at top left, color-mix(in srgb, var(--player-accent, #ffd166) 32%, transparent), transparent 22rem),
+    radial-gradient(circle at bottom right, color-mix(in srgb, var(--player-primary, #2563eb) 30%, transparent), transparent 24rem),
+    linear-gradient(145deg, color-mix(in srgb, var(--player-bg, #06121f) 92%, black), color-mix(in srgb, var(--player-primary, #2563eb) 38%, var(--player-bg, #06121f))),
+    var(--player-bg, #06121f);
+}
+
+.player-focus {
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--player-bg, #06121f) 96%, black), color-mix(in srgb, var(--player-primary, #2563eb) 22%, var(--player-bg, #06121f))),
+    var(--player-bg, #06121f);
+}
+
+.player-calm {
+  background:
+    radial-gradient(circle at top right, color-mix(in srgb, var(--player-accent, #ffd166) 24%, transparent), transparent 24rem),
+    linear-gradient(145deg, color-mix(in srgb, var(--player-bg, #06121f) 82%, white), color-mix(in srgb, var(--player-primary, #2563eb) 28%, var(--player-bg, #06121f))),
+    var(--player-bg, #06121f);
+}
+
 .join-card,
 .live-card,
+.lobby-card,
 .leaderboard-card {
   width: min(100%, 980px);
   border-radius: 28px;
@@ -44,6 +66,58 @@ input {
 
 .join-card {
   width: min(100%, 560px);
+}
+
+.lobby-card {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.lobby-body {
+  display: grid;
+  grid-template-columns: 1fr minmax(260px, 360px);
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.lobby-body h2 {
+  margin: 0 0 0.5rem;
+  font-size: clamp(2rem, 5vw, 4rem);
+  line-height: 1;
+}
+
+.player-cover-image {
+  width: min(100%, 420px);
+  max-height: 180px;
+  object-fit: cover;
+  margin-top: 1rem;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+.participant-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.participant-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.participant-row span {
+  display: inline-grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 999px;
+  background: rgba(255, 209, 102, 0.18);
+  color: #ffd166;
+  font-weight: 700;
 }
 
 .join-form {
@@ -84,8 +158,8 @@ input {
 .phase-chip {
   border-radius: 999px;
   padding: 0.65rem 1rem;
-  background: rgba(255, 209, 102, 0.16);
-  border: 1px solid rgba(255, 209, 102, 0.5);
+  background: color-mix(in srgb, var(--player-accent, #ffd166) 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--player-accent, #ffd166) 55%, transparent);
 }
 
 .question-meta {
@@ -118,8 +192,8 @@ input {
 }
 
 .option-card.selected {
-  background: rgba(255, 209, 102, 0.2);
-  border-color: rgba(255, 209, 102, 0.7);
+  background: color-mix(in srgb, var(--player-accent, #ffd166) 22%, transparent);
+  border-color: color-mix(in srgb, var(--player-accent, #ffd166) 72%, transparent);
   transform: translateY(-2px);
 }
 
@@ -158,7 +232,7 @@ input {
 
 .result-bar-fill {
   height: 100%;
-  background: linear-gradient(90deg, rgba(255, 209, 102, 0.6), rgba(255, 209, 102, 0.9));
+  background: linear-gradient(90deg, color-mix(in srgb, var(--player-primary, #2563eb) 55%, white), var(--player-accent, #ffd166));
   border-radius: 14px;
   min-width: 2px;
   display: flex;
@@ -210,7 +284,7 @@ input {
 }
 
 .ghost-link {
-  color: #ffd166;
+  color: var(--player-accent, #ffd166);
   text-decoration: none;
 }
 
@@ -234,6 +308,7 @@ p {
 
 @media (max-width: 768px) {
   .option-grid,
+  .lobby-body,
   .leaderboard-row {
     grid-template-columns: 1fr;
   }

@@ -37,6 +37,26 @@ function attachQuizSocket(io) {
         socket.data.attemptId = attemptId || null;
         socket.data.name = name || "Guest";
 
+        const participants = [];
+
+        for (const [, joinedSocket] of io.sockets.sockets) {
+          if (
+            joinedSocket.data.joinCode === roomCode &&
+            joinedSocket.data.role === "participant"
+          ) {
+            participants.push(joinedSocket.data.name || "Guest");
+          }
+        }
+
+        snapshot.participants = participants;
+
+        if (role === "participant") {
+          io.to(roomCode).emit("room:participant-joined", {
+            name: socket.data.name,
+            participants,
+          });
+        }
+
         callback({ ok: true, data: snapshot });
       } catch (error) {
         callback({ ok: false, message: error.message });

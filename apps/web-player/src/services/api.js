@@ -9,17 +9,20 @@ async function request(path, options = {}) {
     ...options,
   });
 
+  const contentType = response.headers.get("content-type") || "";
+  const data = contentType.includes("application/json") ? await response.json() : null;
+
   if (!response.ok) {
-    throw new Error(`Request failed: ${response.status}`);
+    throw new Error(data?.message || `Request failed: ${response.status}`);
   }
 
-  return response.json();
+  return data;
 }
 
-export async function joinQuiz(joinCode, participantName, participantEmail = "") {
+export async function joinQuiz(joinCode, participantName, participantEmail = "", accessPassword = "") {
   return request(`/api/quizzes/${joinCode}/join`, {
     method: "POST",
-    body: JSON.stringify({ participantName, participantEmail }),
+    body: JSON.stringify({ participantName, participantEmail, accessPassword }),
   });
 }
 

@@ -17,6 +17,17 @@ const sampleLeaderboard = [
   { rank: 3, participant: "Neha", score: 20, status: "in_progress" },
 ];
 
+const defaultTheme = {
+  preset: "aurora",
+  primaryColor: "#2563eb",
+  accentColor: "#f59e0b",
+  backgroundColor: "#0f172a",
+  fontFamily: "Inter",
+  logoText: "Quiz Live",
+  coverImageUrl: "",
+  playerStyle: "vibrant",
+};
+
 export function QuizProvider({ children }) {
   const [joinCode, setJoinCode] = useState("");
   const [playerName, setPlayerName] = useState("");
@@ -26,6 +37,8 @@ export function QuizProvider({ children }) {
   const [question, setQuestion] = useState(sampleQuestion);
   const [leaderboard, setLeaderboard] = useState(sampleLeaderboard);
   const [lastSummary, setLastSummary] = useState(null);
+  const [participants, setParticipants] = useState([]);
+  const [theme, setTheme] = useState(defaultTheme);
 
   const value = useMemo(
     () => ({
@@ -45,8 +58,23 @@ export function QuizProvider({ children }) {
       setLeaderboard,
       lastSummary,
       setLastSummary,
+      participants,
+      setParticipants,
+      theme,
+      setTheme,
     }),
-    [attemptId, joinCode, lastSummary, leaderboard, phase, playerName, question, remainingSeconds]
+    [
+      attemptId,
+      joinCode,
+      lastSummary,
+      leaderboard,
+      participants,
+      phase,
+      playerName,
+      question,
+      remainingSeconds,
+      theme,
+    ]
   );
 
   return <QuizContext.Provider value={value}>{children}</QuizContext.Provider>;

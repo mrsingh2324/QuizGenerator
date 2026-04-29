@@ -2,6 +2,7 @@ const Attempt = require("../answers/Attempt");
 const {
   completeAttemptById,
   getLeaderboardForQuiz,
+  getLeaderboardForSession,
   submitAttemptAnswer,
 } = require("../answers/attemptService");
 const LiveSession = require("./LiveSession");
@@ -34,7 +35,9 @@ function getQuestionPayload(state) {
 }
 
 async function emitLeaderboard(state) {
-  const leaderboard = await getLeaderboardForQuiz(state.quizId);
+  const leaderboard = state.sessionId
+    ? await getLeaderboardForSession(state.sessionId)
+    : await getLeaderboardForQuiz(state.quizId);
   const normalized = leaderboard.map((entry, index) =>
     normalizeLeaderboardEntry(entry, index + 1)
   );
@@ -44,7 +47,7 @@ async function emitLeaderboard(state) {
 }
 
 async function finalizeQuiz(state) {
-  const attempts = await Attempt.find({ quiz: state.quizId });
+  const attempts = await Attempt.find(state.sessionId ? { session: state.sessionId } : { quiz: state.quizId });
   await Promise.all(attempts.map((attempt) => completeAttemptById(attempt._id)));
 
   state.phase = "final_results";
@@ -195,9 +198,16 @@ async function initializeQuizSession(joinCode) {
     throw error;
   }
 
+  const session = await LiveSession.findOne({
+    quiz: quiz._id,
+    joinCode,
+    status: { $ne: "closed" },
+  }).sort({ createdAt: -1 });
+
   state = setSessionState(joinCode, {
     joinCode,
     quizId: String(quiz._id),
+    sessionId: session ? String(session._id) : null,
     questions: quiz.questions,
     currentQuestionIndex: 0,
     currentQuestion: quiz.questions[0] || null,

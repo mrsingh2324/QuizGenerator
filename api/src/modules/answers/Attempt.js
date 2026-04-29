@@ -33,6 +33,11 @@ const attemptSchema = new mongoose.Schema(
       ref: "Quiz",
       required: true,
     },
+    session: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "LiveSession",
+      default: null,
+    },
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",

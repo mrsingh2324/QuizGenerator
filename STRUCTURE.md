@@ -5,7 +5,7 @@
 - `apps/web-admin` React app for quiz creators and admins
 - `apps/web-player` React app for participants joining by code or QR
 - `api` Express + MongoDB backend for core business logic
-- `services/ai-orchestrator` OpenAI-based AI pipeline service
+- `services/ai-orchestrator` Gemini-Based AI pipeline service
 - `services/document-processor` reserved for file parsing and extraction
 - `services/realtime-gateway` reserved for live quiz sockets and timers
 - `packages/*` shared utilities, types, config, and reusable UI assets

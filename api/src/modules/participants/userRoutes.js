@@ -1,10 +1,16 @@
 const express = require("express");
 
-const { createAdmin, getUserById, listUsers } = require("./userController");
+const {
+  createAdmin,
+  getOrCreateDemoAdmin,
+  getUserById,
+  listUsers,
+} = require("./userController");
 
 const router = express.Router();
 
 router.get("/", listUsers);
+router.get("/demo-admin", getOrCreateDemoAdmin);
 router.post("/admins", createAdmin);
 router.get("/:userId", getUserById);
 

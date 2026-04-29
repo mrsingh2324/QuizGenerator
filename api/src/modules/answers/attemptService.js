@@ -84,9 +84,25 @@ async function getLeaderboardForQuiz(quizId) {
   }));
 }
 
+async function getLeaderboardForSession(sessionId) {
+  const attempts = await Attempt.find({ session: sessionId })
+    .populate("user", "name")
+    .sort({ score: -1, updatedAt: 1 });
+
+  return attempts.map((attempt, index) => ({
+    rank: index + 1,
+    attemptId: attempt._id,
+    participant: attempt.user ? attempt.user.name : "Unknown",
+    score: attempt.score,
+    status: attempt.status,
+    completedAt: attempt.completedAt,
+  }));
+}
+
 module.exports = {
   calculateScore,
   submitAttemptAnswer,
   completeAttemptById,
   getLeaderboardForQuiz,
+  getLeaderboardForSession,
 };
