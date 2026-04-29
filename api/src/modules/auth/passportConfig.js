@@ -74,12 +74,14 @@ function configurePassport() {
     );
   }
 
-  if (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) {
+  const ghClientId = process.env.GH_OAUTH_CLIENT_ID || process.env.GITHUB_CLIENT_ID;
+  const ghClientSecret = process.env.GH_OAUTH_CLIENT_SECRET || process.env.GITHUB_CLIENT_SECRET;
+  if (ghClientId && ghClientSecret) {
     passport.use(
       new GitHubStrategy(
         {
-          clientID: process.env.GITHUB_CLIENT_ID,
-          clientSecret: process.env.GITHUB_CLIENT_SECRET,
+          clientID: ghClientId,
+          clientSecret: ghClientSecret,
           callbackURL: `${API_BASE}/api/auth/github/callback`,
           scope: ["user:email"],
         },
