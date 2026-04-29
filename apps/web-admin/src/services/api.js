@@ -1,9 +1,17 @@
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
+const TOKEN_KEY = "qz_admin_token";
+
+function getToken() {
+  return localStorage.getItem(TOKEN_KEY);
+}
 
 async function request(path, options = {}) {
+  const token = getToken();
+
   const response = await fetch(`${API_URL}${path}`, {
     headers: {
       ...(options.headers || {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     ...options,
   });
@@ -13,25 +21,11 @@ async function request(path, options = {}) {
 
   if (!response.ok) {
     const parts = [data?.message || `Request failed: ${response.status}`];
-
-    if (data?.details) {
-      parts.push(data.details);
-    }
-
+    if (data?.details) parts.push(data.details);
     throw new Error(parts.join(" "));
   }
 
   return data;
-}
-
-export async function createAdmin(payload) {
-  return request("/api/users/admins", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
 }
 
 export async function fetchQuizzes() {
@@ -41,9 +35,7 @@ export async function fetchQuizzes() {
 export async function createQuiz(payload) {
   return request("/api/quizzes", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
 }
@@ -51,23 +43,17 @@ export async function createQuiz(payload) {
 export async function generateQuizFromTopic(payload) {
   return request("/api/quizzes/generate-from-topic", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
 }
 
 export async function uploadDocumentForQuiz(payload) {
   const formData = new FormData();
-  formData.append("admin", payload.admin);
   formData.append("title", payload.title);
   formData.append("file", payload.file);
 
-  if (payload.difficulty) {
-    formData.append("difficulty", payload.difficulty);
-  }
-
+  if (payload.difficulty) formData.append("difficulty", payload.difficulty);
   if (payload.count !== undefined && payload.count !== "") {
     formData.append("count", payload.count);
   }
@@ -81,9 +67,7 @@ export async function uploadDocumentForQuiz(payload) {
 export async function createLiveSession(payload) {
   return request("/api/live-sessions", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
 }

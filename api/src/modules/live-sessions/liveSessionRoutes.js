@@ -9,15 +9,16 @@ const {
   getSessionLeaderboard,
   startLiveSession,
 } = require("./liveSessionController");
+const { requireAdmin } = require("../../middleware/auth");
 
 const router = express.Router();
 
-router.post("/", createLiveSession);
-router.get("/:sessionId", getLiveSessionById);
-router.post("/:sessionId/start", startLiveSession);
-router.post("/:sessionId/advance", advanceLiveSession);
-router.post("/:sessionId/end", endLiveSession);
-router.get("/:sessionId/leaderboard", getSessionLeaderboard);
-router.get("/:sessionId/qr", getSessionQrCode);
+router.post("/", requireAdmin, createLiveSession);
+router.get("/:sessionId", requireAdmin, getLiveSessionById);
+router.post("/:sessionId/start", requireAdmin, startLiveSession);
+router.post("/:sessionId/advance", requireAdmin, advanceLiveSession);
+router.post("/:sessionId/end", requireAdmin, endLiveSession);
+router.get("/:sessionId/leaderboard", requireAdmin, getSessionLeaderboard);
+router.get("/:sessionId/qr", requireAdmin, getSessionQrCode);
 
 module.exports = router;

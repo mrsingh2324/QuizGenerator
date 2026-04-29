@@ -1,3 +1,5 @@
+// normalizeQuestion strips the correct answer — safe to send to participants during
+// an active question phase. Never include correctOptionIndex/explanation here.
 function normalizeQuestion(question, extra = {}) {
   if (!question) {
     return null;
@@ -7,12 +9,23 @@ function normalizeQuestion(question, extra = {}) {
     id: String(question._id || question.id),
     prompt: question.prompt,
     options: Array.isArray(question.options) ? question.options : [],
-    correctOptionIndex:
-      question.correctOptionIndex !== undefined ? question.correctOptionIndex : null,
     difficulty: question.difficulty || "medium",
-    explanation: question.explanation || "",
     sourceType: question.sourceType || "manual",
     ...extra,
+  };
+}
+
+// Used only after a question ends (summary event + admin views).
+function normalizeQuestionWithAnswer(question, extra = {}) {
+  if (!question) {
+    return null;
+  }
+
+  return {
+    ...normalizeQuestion(question, extra),
+    correctOptionIndex:
+      question.correctOptionIndex !== undefined ? question.correctOptionIndex : null,
+    explanation: question.explanation || "",
   };
 }
 
@@ -22,23 +35,11 @@ function normalizeUser(user) {
   }
 
   if (typeof user === "string") {
-    return {
-      id: user,
-      name: "",
-      email: "",
-      role: "",
-      avatar: "",
-    };
+    return { id: user, name: "", email: "", role: "", avatar: "" };
   }
 
   if (!user._id && !user.id) {
-    return {
-      id: String(user),
-      name: "",
-      email: "",
-      role: "",
-      avatar: "",
-    };
+    return { id: String(user), name: "", email: "", role: "", avatar: "" };
   }
 
   return {
@@ -56,6 +57,7 @@ function normalizeQuiz(quiz, options = {}) {
   }
 
   const includeQuestions = options.includeQuestions !== false;
+  const total = quiz.totalQuestions || quiz.questions?.length || 0;
 
   return {
     id: String(quiz._id || quiz.id),
@@ -64,16 +66,14 @@ function normalizeQuiz(quiz, options = {}) {
     category: quiz.category || "general",
     joinCode: quiz.joinCode,
     status: quiz.status,
-    totalQuestions: quiz.totalQuestions || quiz.questions?.length || 0,
+    totalQuestions: total,
     questionTimeLimitSeconds: quiz.questionTimeLimitSeconds || 30,
     resultsWindowSeconds: quiz.resultsWindowSeconds || 5,
     createdBy: normalizeUser(quiz.createdBy),
+    // Public quiz listing never exposes answers — normalizeQuestion is used here
     questions: includeQuestions
-      ? (quiz.questions || []).map((question, index) =>
-          normalizeQuestion(question, {
-            index,
-            totalQuestions: quiz.totalQuestions || quiz.questions?.length || 0,
-          })
+      ? (quiz.questions || []).map((q, index) =>
+          normalizeQuestion(q, { index, totalQuestions: total })
         )
       : undefined,
   };
@@ -133,6 +133,7 @@ module.exports = {
   normalizeLeaderboardEntry,
   normalizeLiveSession,
   normalizeQuestion,
+  normalizeQuestionWithAnswer,
   normalizeQuiz,
   normalizeUser,
 };

@@ -46,6 +46,11 @@ const liveSessionSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    // Epoch ms when the current question timer started — used for restart recovery
+    questionStartedAt: {
+      type: Number,
+      default: null,
+    },
   },
   {
     timestamps: true,

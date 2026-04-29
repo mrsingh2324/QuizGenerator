@@ -1,97 +1,164 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { useQuiz } from "../context/QuizContext";
-import { joinQuiz } from "../services/api";
+import {
+  clearParticipantSession,
+  joinQuiz,
+  loadParticipantSession,
+  saveParticipantSession,
+} from "../services/api";
 import { getSocket } from "../services/socket";
 
 function JoinPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { setAttemptId, setJoinCode, setPlayerName, setQuestion, setRemainingSeconds, setPhase } =
-    useQuiz();
-  const [code, setCode] = useState(searchParams.get("code") || "");
-  const [name, setName] = useState("");
-  const [message, setMessage] = useState("Enter the game code to join the quiz.");
+  const { setAttemptId, setJoinCode, setPlayerName, setPhase, setRemainingSeconds } = useQuiz();
 
+  const [code, setCode] = useState(searchParams.get("code")?.toUpperCase() || "");
+  const [name, setName] = useState("");
+  const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [savedSession, setSavedSession] = useState(null);
+  const checkedRef = useRef(false);
+
+  // On mount: pull query code and check for a saved session for that code
   useEffect(() => {
-    const queryCode = searchParams.get("code");
-    if (queryCode) {
-      setCode(queryCode.toUpperCase());
+    const queryCode = searchParams.get("code")?.toUpperCase() || "";
+    if (queryCode) setCode(queryCode);
+
+    if (queryCode && !checkedRef.current) {
+      checkedRef.current = true;
+      const stored = loadParticipantSession(queryCode);
+      if (stored) {
+        setSavedSession(stored);
+        setName(stored.playerName);
+      }
     }
   }, [searchParams]);
 
-  async function handleJoin(event) {
+  async function doJoin(joinCode, playerName, existingAttemptId) {
+    const result = await joinQuiz(joinCode, playerName, existingAttemptId);
+
+    saveParticipantSession(joinCode, result.attemptId, result.participant.name);
+    setJoinCode(result.quiz.joinCode);
+    setPlayerName(result.participant.name);
+    setAttemptId(result.attemptId);
+
+    const socket = getSocket();
+    socket.emit(
+      "room:join",
+      {
+        joinCode: result.quiz.joinCode,
+        role: "participant",
+        attemptId: result.attemptId,
+        name: result.participant.name,
+      },
+      (response) => {
+        if (response.ok) {
+          setRemainingSeconds(response.data?.remainingSeconds || 30);
+          setPhase(response.data?.phase || "waiting_for_players");
+        }
+      }
+    );
+
+    navigate("/live");
+  }
+
+  async function handleSubmit(event) {
     event.preventDefault();
 
     const normalizedCode = code.trim().toUpperCase();
     const normalizedName = name.trim();
 
     if (!/^[A-Z0-9]{6}$/.test(normalizedCode)) {
-      setMessage("Quiz code must be 6 letters or numbers.");
+      setMessage("Game code must be 6 letters or numbers.");
       return;
     }
 
     if (normalizedName.length < 2) {
-      setMessage("Please enter a valid participant name.");
+      setMessage("Name must be at least 2 characters.");
       return;
     }
 
-    setMessage("Joining...");
+    setLoading(true);
+    setMessage("Joining…");
 
-      try {
-        const result = await joinQuiz(normalizedCode, normalizedName);
-        setJoinCode(result.quiz.joinCode);
-        setPlayerName(result.participant.name);
-        setAttemptId(result.attemptId);
+    try {
+      // If the user typed a different name than the stored one, clear the saved session
+      // so they join fresh rather than rejoin as someone else's name.
+      const existingAttemptId =
+        savedSession && savedSession.playerName === normalizedName
+          ? savedSession.attemptId
+          : null;
 
-        const socket = getSocket();
-        socket.emit(
-          "room:join",
-          {
-            joinCode: result.quiz.joinCode,
-            role: "participant",
-            attemptId: result.attemptId,
-            name: result.participant.name,
-          },
-          (response) => {
-            if (response.ok && response.data?.remainingSeconds) {
-              setRemainingSeconds(response.data.remainingSeconds);
-              setPhase(response.data.phase || "waiting_for_players");
-            }
-          }
-        );
+      if (!existingAttemptId && savedSession) {
+        clearParticipantSession(normalizedCode);
+        setSavedSession(null);
+      }
 
-        navigate("/live");
+      await doJoin(normalizedCode, normalizedName, existingAttemptId);
     } catch (error) {
-      setMessage(error.message || "Unable to join right now. Make sure the backend is running.");
+      setMessage(error.message || "Unable to join. Check the code and try again.");
+      setLoading(false);
     }
   }
 
   return (
-    <main className="player-shell">
-      <section className="join-card animate-pop">
-        <p className="eyebrow">Participant Access</p>
-        <h1>Join Live Quiz</h1>
-        <p className="support-copy">{message}</p>
+    <div className="join-scene">
+      <div className="join-card animate-pop">
+        <div className="join-logo">Q</div>
 
-        <form className="join-form" onSubmit={handleJoin}>
-          <input
-            placeholder="Quiz code"
-            value={code}
-            onChange={(event) => setCode(event.target.value)}
-            required
-          />
-          <input
-            placeholder="Your name"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            required
-          />
-          <button type="submit">Join Now</button>
+        <p className="eyebrow">Live Quiz</p>
+        <h1>Join the game</h1>
+        <p className="support-copy">
+          {message ||
+            (savedSession
+              ? `Welcome back, ${savedSession.playerName}! Tap Join to resume.`
+              : "Enter the game code and your name to jump in.")}
+        </p>
+
+        <form className="join-form" onSubmit={handleSubmit}>
+          <div className="join-input-wrap">
+            <input
+              className="code-input"
+              placeholder="ABC123"
+              value={code}
+              maxLength={6}
+              onChange={(e) => {
+                const v = e.target.value.toUpperCase();
+                setCode(v);
+                // Check for saved session whenever code changes
+                const stored = loadParticipantSession(v);
+                setSavedSession(stored);
+                if (stored && !name) setName(stored.playerName);
+              }}
+              required
+              autoComplete="off"
+              autoCapitalize="characters"
+            />
+          </div>
+
+          <div className="join-input-wrap">
+            <input
+              placeholder="Your name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+              autoComplete="nickname"
+            />
+          </div>
+
+          <button className="join-btn" type="submit" disabled={loading}>
+            {loading
+              ? "Joining…"
+              : savedSession && savedSession.playerName === name.trim()
+                ? "Resume session →"
+                : "Join Now →"}
+          </button>
         </form>
-      </section>
-    </main>
+      </div>
+    </div>
   );
 }
 

@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
 
+import { useAuth } from "../context/AuthContext";
 import {
-  createAdmin,
   createLiveSession,
   fetchQuizzes,
   fetchSessionQr,
@@ -10,6 +9,8 @@ import {
   uploadDocumentForQuiz,
 } from "../services/api";
 import { getAdminSocket } from "../services/socket";
+
+const PLAYER_URL = import.meta.env.VITE_PLAYER_URL || "http://localhost:3001";
 
 const initialTopicForm = {
   title: "",
@@ -19,8 +20,9 @@ const initialTopicForm = {
 };
 
 function DashboardPage() {
+  const { user } = useAuth();
+
   const [quizzes, setQuizzes] = useState([]);
-  const [admin, setAdmin] = useState(null);
   const [topicForm, setTopicForm] = useState(initialTopicForm);
   const [uploadFile, setUploadFile] = useState(null);
   const [uploadTitle, setUploadTitle] = useState("");
@@ -28,45 +30,16 @@ function DashboardPage() {
   const [activeSession, setActiveSession] = useState(null);
   const [qrInfo, setQrInfo] = useState(null);
   const [loading, setLoading] = useState(false);
-  const navigate = useNavigate();
 
   useEffect(() => {
-    let active = true;
-
-    async function bootstrap() {
-      try {
-        const [createdAdmin, loadedQuizzes] = await Promise.all([
-          createAdmin({
-            name: "Quiz Creator",
-            email: `creator-${Date.now()}@example.com`,
-          }),
-          fetchQuizzes(),
-        ]);
-
-        if (!active) {
-          return;
-        }
-
-        setAdmin(createdAdmin);
-        setQuizzes(loadedQuizzes);
-      } catch (error) {
-        if (active) {
-          setStatusText(error.message);
-        }
-      }
-    }
-
-    bootstrap();
-
-    return () => {
-      active = false;
-    };
+    fetchQuizzes()
+      .then(setQuizzes)
+      .catch((err) => setStatusText(err.message));
   }, []);
 
   const stats = useMemo(() => {
-    const published = quizzes.filter((quiz) => quiz.status === "published").length;
-    const withJoinCode = quizzes.filter((quiz) => quiz.joinCode).length;
-
+    const published = quizzes.filter((q) => q.status === "published").length;
+    const withJoinCode = quizzes.filter((q) => q.joinCode).length;
     return [
       { label: "Total quizzes", value: quizzes.length },
       { label: "Published", value: published },
@@ -83,18 +56,13 @@ function DashboardPage() {
   async function handleTopicSubmit(event) {
     event.preventDefault();
 
-    if (!admin) {
-      setStatusText("Admin profile is still loading.");
-      return;
-    }
-
     if (!topicForm.title.trim() || !topicForm.topic.trim()) {
       setStatusText("Title and topic are required.");
       return;
     }
 
     setLoading(true);
-    setStatusText("Sending topic to AI and generating quiz...");
+    setStatusText("Sending topic to AI and generating quiz…");
 
     try {
       const result = await generateQuizFromTopic({
@@ -102,7 +70,6 @@ function DashboardPage() {
         topic: topicForm.topic.trim(),
         difficulty: topicForm.difficulty,
         count: Number(topicForm.count),
-        adminId: admin._id,
       });
 
       if (result.requiresPreferences) {
@@ -120,19 +87,8 @@ function DashboardPage() {
     }
   }
 
-  function handleStartQuiz() {
-    if (activeSession) {
-      startQuizForSession(activeSession);
-    }
-  }
-
   async function handleUploadSubmit(event) {
     event.preventDefault();
-
-    if (!admin) {
-      setStatusText("Admin profile is still loading.");
-      return;
-    }
 
     if (!uploadTitle.trim() || !uploadFile) {
       setStatusText("Upload title and file are required.");
@@ -140,11 +96,10 @@ function DashboardPage() {
     }
 
     setLoading(true);
-    setStatusText("Uploading document, extracting text, and sending it to AI...");
+    setStatusText("Uploading document, extracting text, and sending to AI…");
 
     try {
       const result = await uploadDocumentForQuiz({
-        admin: admin._id,
         title: uploadTitle.trim(),
         file: uploadFile,
         difficulty: topicForm.difficulty,
@@ -155,7 +110,7 @@ function DashboardPage() {
         result.aiResult.action === "needs_preferences"
           ? result.aiResult.preferencePrompt
           : result.aiResult.action === "error"
-            ? `Document uploaded, but AI analysis failed. ${result.aiResult.message}${result.aiResult.details ? ` ${result.aiResult.details}` : ""}`
+            ? `Document uploaded, but AI analysis failed. ${result.aiResult.message}`
             : `Document processed. AI action: ${result.aiResult.action}`
       );
       setUploadTitle("");
@@ -167,66 +122,50 @@ function DashboardPage() {
     }
   }
 
-  async function handleLaunchSession(quiz) {
-    if (!admin) {
-      return;
-    }
-
-    setStatusText(`Launching session for ${quiz.title}...`);
-
-    try {
-      const session = await createLiveSession({
-        quizId: quiz._id || quiz.id,
-        hostId: admin._id,
-      });
-
-      const qr = await fetchSessionQr(session._id || session.id);
-      const socket = getAdminSocket();
-
-      socket.emit(
-        "room:join",
-        {
-          joinCode: session.joinCode,
-          role: "host",
-          name: admin.name,
-        },
-        () => {}
-      );
-
-      setActiveSession(session);
-      setQrInfo(qr);
-      setStatusText(`Session ready. Join code ${session.joinCode}`);
-
-      // Auto-start the quiz for immediate play
-      setTimeout(() => {
-        startQuizForSession(session);
-      }, 800);
-    } catch (error) {
-      setStatusText(error.message);
-    }
-  }
-
   function startQuizForSession(session) {
-    if (!session?.joinCode) {
-      return;
-    }
+    if (!session?.joinCode) return;
 
-    setStatusText("Starting live quiz...");
+    setStatusText("Starting live quiz…");
 
-    const playerUrl = `http://localhost:3001/live?code=${session.joinCode}`;
+    const playerUrl = `${PLAYER_URL}/live?code=${session.joinCode}`;
 
     getAdminSocket().emit(
       "host:start-quiz",
       { joinCode: session.joinCode },
       (response) => {
         if (response.ok) {
-          setStatusText("Live quiz started. Opening player view...");
+          setStatusText("Live quiz started! Opening player view…");
           window.open(playerUrl, "_blank");
         } else {
           setStatusText(response.message || "Unable to start.");
         }
       }
     );
+  }
+
+  async function handleLaunchSession(quiz) {
+    setLoading(true);
+    setStatusText(`Launching session for "${quiz.title}"…`);
+
+    try {
+      const session = await createLiveSession({ quizId: quiz._id || quiz.id });
+      const qr = await fetchSessionQr(session._id || session.id);
+      const socket = getAdminSocket();
+
+      socket.emit(
+        "room:join",
+        { joinCode: session.joinCode, role: "host", name: user?.name || "Host" },
+        () => {}
+      );
+
+      setActiveSession(session);
+      setQrInfo(qr);
+      setStatusText(`Session ready — join code ${session.joinCode}`);
+    } catch (error) {
+      setStatusText(error.message);
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -241,7 +180,11 @@ function DashboardPage() {
 
       <section className="stats-grid">
         {stats.map((item, index) => (
-          <article key={item.label} className="stat-card animate-rise" style={{ animationDelay: `${index * 80}ms` }}>
+          <article
+            key={item.label}
+            className="stat-card animate-rise"
+            style={{ animationDelay: `${index * 80}ms` }}
+          >
             <span>{item.label}</span>
             <strong>{item.value}</strong>
           </article>
@@ -261,9 +204,7 @@ function DashboardPage() {
             <span>Quiz title</span>
             <input
               value={topicForm.title}
-              onChange={(event) =>
-                setTopicForm((current) => ({ ...current, title: event.target.value }))
-              }
+              onChange={(e) => setTopicForm((f) => ({ ...f, title: e.target.value }))}
               placeholder="Fractions Basics"
               required
             />
@@ -273,9 +214,7 @@ function DashboardPage() {
             <span>Topic or study material</span>
             <textarea
               value={topicForm.topic}
-              onChange={(event) =>
-                setTopicForm((current) => ({ ...current, topic: event.target.value }))
-              }
+              onChange={(e) => setTopicForm((f) => ({ ...f, topic: e.target.value }))}
               rows={5}
               placeholder="Enter a topic name or paste study notes"
               required
@@ -287,9 +226,7 @@ function DashboardPage() {
               <span>Difficulty</span>
               <select
                 value={topicForm.difficulty}
-                onChange={(event) =>
-                  setTopicForm((current) => ({ ...current, difficulty: event.target.value }))
-                }
+                onChange={(e) => setTopicForm((f) => ({ ...f, difficulty: e.target.value }))}
               >
                 <option value="easy">Easy</option>
                 <option value="medium">Medium</option>
@@ -304,9 +241,7 @@ function DashboardPage() {
                 max="20"
                 type="number"
                 value={topicForm.count}
-                onChange={(event) =>
-                  setTopicForm((current) => ({ ...current, count: event.target.value }))
-                }
+                onChange={(e) => setTopicForm((f) => ({ ...f, count: e.target.value }))}
               />
             </label>
           </div>
@@ -328,7 +263,7 @@ function DashboardPage() {
             <span>Document title</span>
             <input
               value={uploadTitle}
-              onChange={(event) => setUploadTitle(event.target.value)}
+              onChange={(e) => setUploadTitle(e.target.value)}
               placeholder="Chapter 4 Notes"
               required
             />
@@ -338,7 +273,7 @@ function DashboardPage() {
             <span>Choose file</span>
             <input
               accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-              onChange={(event) => setUploadFile(event.target.files?.[0] || null)}
+              onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
               type="file"
               required
             />
@@ -361,20 +296,21 @@ function DashboardPage() {
 
           <div className="quiz-list">
             {quizzes.length === 0 ? (
-              <div className="empty-state">No quizzes yet.</div>
+              <div className="empty-state">No quizzes yet. Create one above.</div>
             ) : (
               quizzes.map((quiz) => (
                 <article className="quiz-item" key={quiz._id || quiz.id}>
                   <div>
                     <h4>{quiz.title}</h4>
                     <p>
-                      Code: <strong>{quiz.joinCode}</strong> • {quiz.totalQuestions} questions
+                      Code: <strong>{quiz.joinCode}</strong> · {quiz.totalQuestions} questions
                     </p>
                   </div>
                   <button
                     className="secondary-button"
                     onClick={() => handleLaunchSession(quiz)}
                     type="button"
+                    disabled={loading}
                   >
                     Launch
                   </button>
@@ -400,10 +336,19 @@ function DashboardPage() {
               <p>
                 Join code: <strong>{qrInfo.joinCode}</strong>
               </p>
-              <a className="ghost-link-dark" href={qrInfo.joinUrl} target="_blank" rel="noreferrer">
+              <a
+                className="ghost-link-dark"
+                href={qrInfo.joinUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
                 Open player join link
               </a>
-              <button className="primary-button" onClick={handleStartQuiz} type="button">
+              <button
+                className="primary-button"
+                onClick={() => startQuizForSession(activeSession)}
+                type="button"
+              >
                 Start Live Quiz
               </button>
             </div>

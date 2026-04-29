@@ -15,11 +15,7 @@ const {
 } = require("./socketSessionStore");
 
 function emitRoomEvent(roomCode, eventName, payload) {
-  quizEventBus.emit("room:event", {
-    roomCode,
-    eventName,
-    payload,
-  });
+  quizEventBus.emit("room:event", { roomCode, eventName, payload });
 }
 
 function getConnectedParticipantCount(state) {
@@ -27,6 +23,7 @@ function getConnectedParticipantCount(state) {
 }
 
 function getQuestionPayload(state) {
+  // normalizeQuestion intentionally omits correctOptionIndex — safe for broadcast
   return normalizeQuestion(state.currentQuestion, {
     index: state.currentQuestionIndex,
     totalQuestions: state.questions.length,
@@ -38,7 +35,6 @@ async function emitLeaderboard(state) {
   const normalized = leaderboard.map((entry, index) =>
     normalizeLeaderboardEntry(entry, index + 1)
   );
-
   emitRoomEvent(state.joinCode, "leaderboard:update", normalized);
   return normalized;
 }
@@ -61,20 +57,14 @@ async function finalizeQuiz(state) {
   }
 
   const finalLeaderboard = await emitLeaderboard(state);
-
-  emitRoomEvent(state.joinCode, "quiz:finished", {
-    leaderboard: finalLeaderboard,
-  });
-
+  emitRoomEvent(state.joinCode, "quiz:finished", { leaderboard: finalLeaderboard });
   return finalLeaderboard;
 }
 
 async function startQuestion(joinCode, questionIndex = 0) {
   const state = getSessionState(joinCode);
 
-  if (!state) {
-    throw new Error("Session state not found");
-  }
+  if (!state) throw new Error("Session state not found");
 
   if (state.questionTimer) {
     clearInterval(state.questionTimer);
@@ -98,9 +88,8 @@ async function startQuestion(joinCode, questionIndex = 0) {
   if (session) {
     session.status = "question_live";
     session.currentQuestionIndex = questionIndex;
-    if (!session.startedAt) {
-      session.startedAt = new Date();
-    }
+    session.questionStartedAt = state.questionStartedAt;
+    if (!session.startedAt) session.startedAt = new Date();
     await session.save();
   }
 
@@ -115,13 +104,16 @@ async function startQuestion(joinCode, questionIndex = 0) {
     remainingSeconds: state.questionTimeLimitSeconds,
   });
 
+  // Use wall-clock time so drift from setInterval jitter doesn't accumulate.
   state.questionTimer = setInterval(async () => {
-    state.remainingSeconds -= 1;
+    const elapsed = Math.floor((Date.now() - state.questionStartedAt) / 1000);
+    const remaining = Math.max(0, state.questionTimeLimitSeconds - elapsed);
+    state.remainingSeconds = remaining;
 
-    if (state.remainingSeconds > 0) {
+    if (remaining > 0) {
       emitRoomEvent(joinCode, "timer:tick", {
         phase: "question_live",
-        remainingSeconds: state.remainingSeconds,
+        remainingSeconds: remaining,
       });
       return;
     }
@@ -133,9 +125,7 @@ async function startQuestion(joinCode, questionIndex = 0) {
 async function finishQuestion(joinCode, reason = "timer_finished") {
   const state = getSessionState(joinCode);
 
-  if (!state || state.phase !== "question_live") {
-    return null;
-  }
+  if (!state || state.phase !== "question_live") return null;
 
   if (state.questionTimer) {
     clearInterval(state.questionTimer);
@@ -150,8 +140,10 @@ async function finishQuestion(joinCode, reason = "timer_finished") {
     count: state.answerCounts.get(optionIndex) || 0,
   }));
 
+  // correctOptionIndex is safe to reveal here — question is over
   emitRoomEvent(joinCode, "question:summary", {
     questionId: String(state.currentQuestion._id),
+    correctOptionIndex: state.currentQuestion.correctOptionIndex,
     reason,
     counts,
     totalParticipants: getConnectedParticipantCount(state),
@@ -182,12 +174,12 @@ async function finishQuestion(joinCode, reason = "timer_finished") {
 
 async function initializeQuizSession(joinCode) {
   let state = getSessionState(joinCode);
+  if (state) return state;
 
-  if (state) {
-    return state;
-  }
-
-  const quiz = await Quiz.findOne({ joinCode }).populate("questions");
+  const [quiz, session] = await Promise.all([
+    Quiz.findOne({ joinCode }).populate("questions"),
+    LiveSession.findOne({ joinCode, status: { $ne: "closed" } }),
+  ]);
 
   if (!quiz) {
     const error = new Error("Quiz not found");
@@ -198,6 +190,7 @@ async function initializeQuizSession(joinCode) {
   state = setSessionState(joinCode, {
     joinCode,
     quizId: String(quiz._id),
+    hostUserId: session?.host ? String(session.host) : null,
     questions: quiz.questions,
     currentQuestionIndex: 0,
     currentQuestion: quiz.questions[0] || null,
@@ -236,12 +229,17 @@ function createJoinSnapshot(state) {
   return snapshot;
 }
 
-async function joinQuizSession({ joinCode, role = "participant", attemptId, socketId }) {
+async function joinQuizSession({ joinCode, role = "participant", attemptId, socketId, userId }) {
   const roomCode = joinCode.toUpperCase();
   const state = await initializeQuizSession(roomCode);
 
   if (role === "participant" && attemptId) {
     state.participantSockets.set(String(attemptId), socketId);
+  }
+
+  // If a verified host joins and the session has no hostUserId recorded yet, set it now
+  if (role === "host" && userId && !state.hostUserId) {
+    state.hostUserId = userId;
   }
 
   emitRoomEvent(roomCode, "room:presence", {
@@ -253,18 +251,34 @@ async function joinQuizSession({ joinCode, role = "participant", attemptId, sock
   return createJoinSnapshot(state);
 }
 
-async function startQuizSession(joinCode) {
+function isAuthorizedHost(state, userId) {
+  if (!state.hostUserId || !userId) return false;
+  return state.hostUserId === userId;
+}
+
+async function startQuizSession(joinCode, userId) {
   const roomCode = joinCode.toUpperCase();
   const state = await initializeQuizSession(roomCode);
+
+  if (!isAuthorizedHost(state, userId)) {
+    const error = new Error("Only the session host can start the quiz");
+    error.statusCode = 403;
+    throw error;
+  }
+
   await startQuestion(roomCode, state.currentQuestionIndex || 0);
 }
 
-async function advanceQuizSession(joinCode) {
+async function advanceQuizSession(joinCode, userId) {
   const roomCode = joinCode.toUpperCase();
   const state = getSessionState(roomCode);
 
-  if (!state) {
-    throw new Error("Session state not found");
+  if (!state) throw new Error("Session state not found");
+
+  if (!isAuthorizedHost(state, userId)) {
+    const error = new Error("Only the session host can advance the quiz");
+    error.statusCode = 403;
+    throw error;
   }
 
   if (state.phase === "answer_summary") {
@@ -273,9 +287,7 @@ async function advanceQuizSession(joinCode) {
       state.summaryTimer = null;
     }
 
-    const hasNextQuestion = state.currentQuestionIndex + 1 < state.questions.length;
-
-    if (!hasNextQuestion) {
+    if (state.currentQuestionIndex + 1 >= state.questions.length) {
       await finalizeQuiz(state);
       return;
     }
@@ -293,17 +305,15 @@ async function submitQuizAnswer({ joinCode, attemptId, questionId, selectedOptio
   const roomCode = joinCode.toUpperCase();
   const state = getSessionState(roomCode);
 
-  if (!state) {
-    throw new Error("Session state not found");
-  }
-
-  if (state.phase !== "question_live") {
-    throw new Error("Question is not currently active");
-  }
+  if (!state) throw new Error("Session state not found");
+  if (state.phase !== "question_live") throw new Error("Question is not currently active");
 
   if (String(state.currentQuestion._id) !== String(questionId)) {
     throw new Error("Answer submitted for the wrong question");
   }
+
+  // Prevent double-counting from a duplicate submit for the same attempt
+  const alreadyAnswered = state.answeredAttemptIds.has(String(attemptId));
 
   const { attempt, isCorrect } = await submitAttemptAnswer({
     attemptId,
@@ -311,11 +321,13 @@ async function submitQuizAnswer({ joinCode, attemptId, questionId, selectedOptio
     selectedOptionIndex,
   });
 
-  state.answeredAttemptIds.add(String(attemptId));
-  state.answerCounts.set(
-    selectedOptionIndex,
-    (state.answerCounts.get(selectedOptionIndex) || 0) + 1
-  );
+  if (!alreadyAnswered) {
+    state.answeredAttemptIds.add(String(attemptId));
+    state.answerCounts.set(
+      selectedOptionIndex,
+      (state.answerCounts.get(selectedOptionIndex) || 0) + 1
+    );
+  }
 
   emitRoomEvent(roomCode, "answers:progress", {
     answeredCount: state.answeredAttemptIds.size,
@@ -343,16 +355,12 @@ async function getQuizSessionLeaderboard(joinCode) {
 }
 
 function leaveQuizSession({ joinCode, role, attemptId }) {
-  if (!joinCode) {
-    return;
-  }
+  if (!joinCode) return;
 
   const roomCode = joinCode.toUpperCase();
   const state = getSessionState(roomCode);
 
-  if (!state) {
-    return;
-  }
+  if (!state) return;
 
   if (role === "participant" && attemptId) {
     state.participantSockets.delete(String(attemptId));

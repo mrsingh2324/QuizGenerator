@@ -12,16 +12,29 @@ const Quiz = require("./Quiz");
 const User = require("../participants/User");
 const generateJoinCode = require("./generateJoinCode");
 
-async function generateUniqueJoinCode() {
-  let joinCode = generateJoinCode();
-  let existingQuiz = await Quiz.findOne({ joinCode });
+// MongoDB enforces uniqueness on joinCode via a unique index.
+// We rely on that guarantee and retry on duplicate-key errors instead of
+// pre-checking with findOne (which has a TOCTOU race window).
+const DUPLICATE_KEY_CODE = 11000;
+const JOIN_CODE_MAX_RETRIES = 10;
 
-  while (existingQuiz) {
-    joinCode = generateJoinCode();
-    existingQuiz = await Quiz.findOne({ joinCode });
+async function createQuizDocument(data) {
+  for (let attempt = 0; attempt < JOIN_CODE_MAX_RETRIES; attempt++) {
+    try {
+      return await Quiz.create({ ...data, joinCode: generateJoinCode() });
+    } catch (err) {
+      const isDuplicateJoinCode =
+        err.code === DUPLICATE_KEY_CODE && err.keyPattern?.joinCode;
+
+      if (isDuplicateJoinCode && attempt < JOIN_CODE_MAX_RETRIES - 1) {
+        continue;
+      }
+
+      throw err;
+    }
   }
 
-  return joinCode;
+  throw new Error("Failed to generate a unique join code — please try again.");
 }
 
 async function findOrCreateAdmin({ adminId, adminName, adminEmail }) {
@@ -95,15 +108,13 @@ async function createQuiz(req, res, next) {
     const createdQuestions = await Question.insertMany(questions);
 
     const desiredStatus = ["draft", "published", "closed"].includes(status) ? status : "draft";
-    const joinCode = await generateUniqueJoinCode();
 
-    const quiz = await Quiz.create({
+    const quiz = await createQuizDocument({
       title,
       description,
       category,
       createdBy: admin._id,
       questions: createdQuestions.map((question) => question._id),
-      joinCode,
       status: desiredStatus,
       totalQuestions: createdQuestions.length,
       questionTimeLimitSeconds,
@@ -276,31 +287,47 @@ async function updateQuizStatus(req, res, next) {
 async function joinQuiz(req, res, next) {
   try {
     const { joinCode } = req.params;
-    const { participantName, participantEmail } = req.body;
+    const { participantName, participantEmail, attemptId: existingAttemptId } = req.body;
 
     if (!participantName) {
-      return res.status(400).json({
-        message: "participantName is required",
-      });
+      return res.status(400).json({ message: "participantName is required" });
     }
 
     const quiz = await Quiz.findOne({ joinCode: joinCode.toUpperCase() }).populate("questions");
 
     if (!quiz) {
-      return res.status(404).json({
-        message: "Quiz not found",
-      });
+      return res.status(404).json({ message: "Quiz not found" });
     }
 
     if (quiz.status !== "published") {
-      return res.status(400).json({
-        message: "Quiz is not open for joining",
-      });
+      return res.status(400).json({ message: "Quiz is not open for joining" });
+    }
+
+    // Rejoin path — client sends back the attemptId it stored locally.
+    // Validate the attempt belongs to this quiz and return the existing identity
+    // without creating a new user or attempt (prevents leaderboard pollution on refresh).
+    if (existingAttemptId) {
+      const existingAttempt = await Attempt.findById(existingAttemptId).populate("user");
+
+      if (
+        existingAttempt &&
+        String(existingAttempt.quiz) === String(quiz._id) &&
+        existingAttempt.user
+      ) {
+        return res.status(200).json({
+          message: "Rejoined quiz successfully",
+          quiz: normalizeQuiz(quiz),
+          participant: normalizeUser(existingAttempt.user),
+          attemptId: String(existingAttempt._id),
+          rejoined: true,
+        });
+      }
+      // Attempt invalid / not for this quiz — fall through to create fresh
     }
 
     const participant = await User.create({
       name: participantName,
-      email: participantEmail,
+      email: participantEmail || undefined,
       role: "participant",
     });
 
@@ -320,6 +347,7 @@ async function joinQuiz(req, res, next) {
       quiz: normalizeQuiz(quiz),
       participant: normalizeUser(participant),
       attemptId: String(attempt._id),
+      rejoined: false,
     });
   } catch (error) {
     return next(error);

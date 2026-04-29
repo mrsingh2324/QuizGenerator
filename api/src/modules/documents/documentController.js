@@ -1,5 +1,6 @@
 const { analyzeDocumentText } = require("../../services/aiService");
 const { extractTextFromFile } = require("./textExtractionService");
+const { validateFileBytes } = require("./fileValidator");
 const UploadedDocument = require("./UploadedDocument");
 
 async function createDocument(req, res, next) {
@@ -44,6 +45,11 @@ async function uploadDocumentAndAnalyze(req, res, next) {
       return res.status(400).json({
         message: "file is required",
       });
+    }
+
+    const fileCheck = validateFileBytes(req.file.buffer, req.file.mimetype);
+    if (!fileCheck.valid) {
+      return res.status(400).json({ message: fileCheck.reason });
     }
 
     if (difficulty && !["easy", "medium", "hard"].includes(difficulty)) {

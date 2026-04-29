@@ -1,3 +1,4 @@
+const { verifyToken } = require("../../middleware/auth");
 const quizEventBus = require("./quizEventBus");
 const {
   advanceQuizSession,
@@ -9,6 +10,24 @@ const {
 } = require("./quizEngine");
 
 function attachQuizSocket(io) {
+  // Extract JWT from socket handshake auth and attach user info.
+  // Non-authenticated connections are still allowed (participants don't log in).
+  io.use((socket, next) => {
+    const token = socket.handshake.auth?.token;
+
+    if (token) {
+      try {
+        const payload = verifyToken(token);
+        socket.data.userId = payload.userId;
+        socket.data.userRole = payload.role;
+      } catch {
+        // token present but invalid — treat as anonymous
+      }
+    }
+
+    next();
+  });
+
   quizEventBus.on("room:event", ({ roomCode, eventName, payload }) => {
     io.to(roomCode).emit(eventName, payload);
   });
@@ -18,9 +37,7 @@ function attachQuizSocket(io) {
       try {
         const { joinCode, role = "participant", attemptId, name } = payload || {};
 
-        if (!joinCode) {
-          throw new Error("joinCode is required");
-        }
+        if (!joinCode) throw new Error("joinCode is required");
 
         const roomCode = joinCode.toUpperCase();
         socket.join(roomCode);
@@ -30,6 +47,7 @@ function attachQuizSocket(io) {
           role,
           attemptId,
           socketId: socket.id,
+          userId: socket.data.userId || null,
         });
 
         socket.data.joinCode = roomCode;
@@ -47,11 +65,13 @@ function attachQuizSocket(io) {
       try {
         const joinCode = (payload?.joinCode || socket.data.joinCode || "").toUpperCase();
 
-        if (!joinCode) {
-          throw new Error("joinCode is required");
+        if (!joinCode) throw new Error("joinCode is required");
+
+        if (!socket.data.userId) {
+          throw new Error("Authentication required to start a quiz");
         }
 
-        await startQuizSession(joinCode);
+        await startQuizSession(joinCode, socket.data.userId);
         callback({ ok: true });
       } catch (error) {
         callback({ ok: false, message: error.message });
@@ -62,11 +82,13 @@ function attachQuizSocket(io) {
       try {
         const joinCode = (payload?.joinCode || socket.data.joinCode || "").toUpperCase();
 
-        if (!joinCode) {
-          throw new Error("joinCode is required");
+        if (!joinCode) throw new Error("joinCode is required");
+
+        if (!socket.data.userId) {
+          throw new Error("Authentication required to advance the quiz");
         }
 
-        await advanceQuizSession(joinCode);
+        await advanceQuizSession(joinCode, socket.data.userId);
         callback({ ok: true });
       } catch (error) {
         callback({ ok: false, message: error.message });
@@ -98,9 +120,7 @@ function attachQuizSocket(io) {
       try {
         const joinCode = (payload?.joinCode || socket.data.joinCode || "").toUpperCase();
 
-        if (!joinCode) {
-          throw new Error("joinCode is required");
-        }
+        if (!joinCode) throw new Error("joinCode is required");
 
         const leaderboard = await getQuizSessionLeaderboard(joinCode);
         callback({ ok: true, data: leaderboard });
@@ -119,6 +139,4 @@ function attachQuizSocket(io) {
   });
 }
 
-module.exports = {
-  attachQuizSocket,
-};
+module.exports = { attachQuizSocket };
