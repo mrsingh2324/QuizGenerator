@@ -1,62 +1,74 @@
-import { useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { useQuiz } from "../context/QuizContext";
 import { getSocket } from "../services/socket";
 
+const OPTION_LETTERS = ["A", "B", "C", "D"];
+
+// SVG circle math for the timer ring
+const RING_R = 26;
+const RING_CIRCUMFERENCE = 2 * Math.PI * RING_R;
+
+function timerStroke(remaining, total) {
+  if (!total || total <= 0) return RING_CIRCUMFERENCE;
+  const fraction = Math.max(0, Math.min(1, remaining / total));
+  return RING_CIRCUMFERENCE * (1 - fraction);
+}
+
+function timerColor(remaining, total) {
+  if (!total) return "#a78bfa";
+  const pct = remaining / total;
+  if (pct > 0.5) return "#43d68a";
+  if (pct > 0.2) return "#ffc857";
+  return "#ff4b57";
+}
+
 function LiveQuizPage() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
   const {
     attemptId,
     joinCode,
-    lastSummary,
-    participants,
     phase,
     playerName,
     question,
     remainingSeconds,
     setLastSummary,
     setLeaderboard,
-    setParticipants,
     setPhase,
     setQuestion,
     setRemainingSeconds,
-    theme,
   } = useQuiz();
+
   const [selectedOption, setSelectedOption] = useState(null);
-  const [isSubmitted, setIsSubmitted] = useState(false);
-  const [feedback, setFeedback] = useState("Waiting for the next question...");
-  const playerStyle = {
-    "--player-primary": theme.primaryColor || "#2563eb",
-    "--player-accent": theme.accentColor || "#f59e0b",
-    "--player-bg": theme.backgroundColor || "#0f172a",
-    fontFamily: theme.fontFamily || "Inter",
-  };
+  const [summaryData, setSummaryData] = useState(null); // { counts, correctOptionIndex, durationSeconds }
+  const [summaryCountdown, setSummaryCountdown] = useState(0);
+  const summaryTimerRef = useRef(null);
+
+  // Total seconds for the current question (used to drive the ring fill)
+  const totalSecondsRef = useRef(remainingSeconds);
+  useEffect(() => {
+    if (phase === "question_live") {
+      totalSecondsRef.current = remainingSeconds;
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
 
   useEffect(() => {
-    if (joinCode && attemptId) {
-      return;
-    }
-
-    const queryCode = searchParams.get("code");
-    navigate(queryCode ? `/?code=${queryCode}` : "/", { replace: true });
-  }, [attemptId, joinCode, navigate, searchParams]);
-
-  useEffect(() => {
-    if (!joinCode || !attemptId) {
-      return undefined;
-    }
-
     const socket = getSocket();
 
     function handleQuestionBroadcast(payload) {
       setPhase(payload.phase);
       setQuestion(payload.question);
       setRemainingSeconds(payload.remainingSeconds);
+      totalSecondsRef.current = payload.remainingSeconds;
       setSelectedOption(null);
-      setIsSubmitted(false);
-      setFeedback("Choose your answer before the timer ends.");
+      setSummaryData(null);
+      setSummaryCountdown(0);
+      if (summaryTimerRef.current) {
+        clearInterval(summaryTimerRef.current);
+        summaryTimerRef.current = null;
+      }
     }
 
     function handleTimerTick(payload) {
@@ -66,29 +78,38 @@ function LiveQuizPage() {
     function handleTimerSync(payload) {
       setPhase(payload.phase);
       setRemainingSeconds(payload.remainingSeconds);
+      if (payload.phase === "question_live") {
+        totalSecondsRef.current = payload.remainingSeconds;
+      }
     }
 
     function handleSummary(payload) {
       setPhase("answer_summary");
       setLastSummary(payload);
-      setFeedback("Answer summary is live.");
+      setSummaryData(payload);
+
+      const dur = payload.durationSeconds || 5;
+      setSummaryCountdown(dur);
+
+      if (summaryTimerRef.current) clearInterval(summaryTimerRef.current);
+      summaryTimerRef.current = setInterval(() => {
+        setSummaryCountdown((prev) => {
+          if (prev <= 1) {
+            clearInterval(summaryTimerRef.current);
+            summaryTimerRef.current = null;
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
     }
 
     function handleLeaderboard(payload) {
       setLeaderboard(payload);
     }
 
-    function handleParticipantJoined(payload) {
-      setParticipants(payload.participants || []);
-      if (phase === "waiting_for_players") {
-        setFeedback(`${payload.name || "A player"} joined the lobby.`);
-      }
-    }
-
     function handleFinished(payload) {
-      if (payload.leaderboard) {
-        setLeaderboard(payload.leaderboard);
-      }
+      if (payload.leaderboard) setLeaderboard(payload.leaderboard);
       navigate("/leaderboard");
     }
 
@@ -97,7 +118,6 @@ function LiveQuizPage() {
     socket.on("timer:sync", handleTimerSync);
     socket.on("question:summary", handleSummary);
     socket.on("leaderboard:update", handleLeaderboard);
-    socket.on("room:participant-joined", handleParticipantJoined);
     socket.on("quiz:finished", handleFinished);
 
     return () => {
@@ -106,169 +126,172 @@ function LiveQuizPage() {
       socket.off("timer:sync", handleTimerSync);
       socket.off("question:summary", handleSummary);
       socket.off("leaderboard:update", handleLeaderboard);
-      socket.off("room:participant-joined", handleParticipantJoined);
       socket.off("quiz:finished", handleFinished);
+      if (summaryTimerRef.current) clearInterval(summaryTimerRef.current);
     };
-  }, [
-    navigate,
-    phase,
-    setLastSummary,
-    setLeaderboard,
-    setParticipants,
-    setPhase,
-    setQuestion,
-    setRemainingSeconds,
-  ]);
+  }, [navigate, setLastSummary, setLeaderboard, setPhase, setQuestion, setRemainingSeconds]);
 
-  function handleSubmit(optionIndex) {
-      if (!joinCode || !attemptId || !question?.id) {
-        return;
-      }
+  function handleSelectOption(optionIndex) {
+    if (!joinCode || !attemptId || !question?.id) return;
+    if (selectedOption !== null || phase !== "question_live") return;
 
-      if (selectedOption !== null || phase !== "question_live") {
-        return;
-      }
+    setSelectedOption(optionIndex);
 
-      setSelectedOption(optionIndex);
-      setIsSubmitted(true);
-      setFeedback("Answer submitted - waiting for others...");
-
-      getSocket().emit(
-        "player:submit-answer",
-        {
-          joinCode,
-          attemptId,
-          questionId: question.id,
-          selectedOptionIndex: optionIndex,
-        },
-        (response) => {
-          if (!response.ok) {
-            setFeedback(response.message || "Unable to submit answer.");
-          }
+    getSocket().emit(
+      "player:submit-answer",
+      { joinCode, attemptId, questionId: question.id, selectedOptionIndex: optionIndex },
+      (response) => {
+        if (!response.ok) {
+          // Roll back selection on error
+          setSelectedOption(null);
         }
-      );
-    }
+      }
+    );
+  }
 
   if (phase === "waiting_for_players") {
     return (
-      <main className={`player-shell themed-player player-${theme.playerStyle || "vibrant"}`} style={playerStyle}>
-        <section className="lobby-card animate-pop">
-          <div className="live-topbar">
-            <div>
-              <p className="eyebrow">{theme.logoText || "Lobby"}</p>
-              <h1>{joinCode || "Waiting"}</h1>
-            </div>
-            <div className="phase-chip">{participants.length} joined</div>
+      <main className="player-shell">
+        <div className="cosmos-card animate-pop">
+          <div className="waiting-screen">
+            <div className="waiting-pulse" />
+            <h2>Waiting for host…</h2>
+            <p>The quiz will start when the host is ready.</p>
           </div>
-
-          <div className="lobby-body">
-            <div>
-              <h2>Host will start soon</h2>
-              <p className="support-copy">
-                You are in as {playerName || "Guest"}. Keep this tab open.
-              </p>
-              {theme.coverImageUrl ? (
-                <img className="player-cover-image" src={theme.coverImageUrl} alt="Quiz cover" />
-              ) : null}
-            </div>
-
-            <div className="participant-list">
-              {participants.length === 0 ? (
-                <p className="participant-row">Waiting for players...</p>
-              ) : (
-                participants.map((participant, index) => (
-                  <p className="participant-row" key={`${participant}-${index}`}>
-                    <span>{index + 1}</span>
-                    {participant}
-                  </p>
-                ))
-              )}
-            </div>
-          </div>
-
-          <p className="support-copy">{feedback}</p>
-        </section>
+        </div>
       </main>
     );
   }
 
+  const progress =
+    question?.totalQuestions > 0
+      ? ((question.index + 1) / question.totalQuestions) * 100
+      : 0;
+
+  const isSummary = phase === "answer_summary" && summaryData;
+
   return (
-    <main className={`player-shell themed-player player-${theme.playerStyle || "vibrant"}`} style={playerStyle}>
-      <section className="live-card animate-pop">
+    <main className="player-shell">
+      <div className="cosmos-card animate-pop">
+        {/* Top bar */}
         <div className="live-topbar">
-          <div>
-            <p className="eyebrow">{theme.logoText || "Player"}</p>
-            <h1>{playerName || "Guest"}</h1>
+          <div className="player-chip">
+            <div className="player-avatar">
+              {(playerName || "G")[0].toUpperCase()}
+            </div>
+            <span className="player-chip-name">{playerName || "Guest"}</span>
           </div>
-          <div className="timer-badge">{remainingSeconds}s</div>
-        </div>
 
-        <div className="question-meta">
-          <span>
-            Question {(question?.index || 0) + 1} / {question?.totalQuestions || 0}
-          </span>
-          <span className="phase-chip">{phase.replaceAll("_", " ")}</span>
-        </div>
-
-        <h2 className="question-title">{question?.prompt || "Waiting for host..."}</h2>
-        {theme.coverImageUrl && phase === "waiting_for_players" ? (
-          <img className="player-cover-image" src={theme.coverImageUrl} alt="Quiz cover" />
-        ) : null}
-
-        <div className="option-grid">
-          {(question?.options || []).map((option, index) => (
-            <button
-              key={option}
-              className={`option-card ${selectedOption === index ? "selected" : ""}`}
-              onClick={() => handleSubmit(index)}
-              type="button"
+          {/* Circular timer */}
+          <div className="timer-ring-wrap">
+            <svg className="timer-ring-svg" viewBox="0 0 64 64">
+              <circle
+                className="timer-ring-track"
+                cx="32" cy="32" r={RING_R}
+              />
+              <circle
+                className="timer-ring-fill"
+                cx="32" cy="32" r={RING_R}
+                stroke={timerColor(remainingSeconds, totalSecondsRef.current)}
+                strokeDasharray={RING_CIRCUMFERENCE}
+                strokeDashoffset={timerStroke(remainingSeconds, totalSecondsRef.current)}
+              />
+            </svg>
+            <div
+              className="timer-ring-number"
+              style={{ color: timerColor(remainingSeconds, totalSecondsRef.current) }}
             >
-              <span>{String.fromCharCode(65 + index)}</span>
-              <strong>{option}</strong>
-            </button>
-          ))}
-        </div>
-
-        {lastSummary ? (
-          <div className="summary-strip">
-            <div className="results-bar-container">
-              {lastSummary.counts.map((item) => {
-                const percentage = lastSummary.totalParticipants > 0
-                  ? Math.round((item.count / lastSummary.totalParticipants) * 100)
-                  : 0;
-                return (
-                  <div key={item.optionIndex} className="result-bar-group">
-                    <div className="result-bar-label">
-                      Option {String.fromCharCode(65 + item.optionIndex)}
-                    </div>
-                    <div className="result-bar-track">
-                      <div
-                        className="result-bar-fill"
-                        style={{ width: `${percentage}%` }}
-                      >
-                        <span className="result-bar-percentage">
-                          {percentage}%
-                        </span>
-                      </div>
-                    </div>
-                    <div className="result-bar-count">
-                      {item.count} participant{item.count !== 1 ? 's' : ''}
-                    </div>
-                  </div>
-                );
-              })}
+              {Math.max(0, remainingSeconds)}
             </div>
           </div>
-        ) : null}
+        </div>
 
-        <p className="support-copy">
-          {phase === "question_live" && !isSubmitted && "Choose your answer before the timer ends."}
-          {phase === "question_live" && isSubmitted && "Answer submitted - waiting for others..."}
-          {phase === "answer_summary" && "Results are in - see how everyone voted above"}
-          {phase === "waiting_for_players" && "Waiting for more players to join..."}
-          {phase !== "question_live" && phase !== "answer_summary" && phase !== "waiting_for_players" && feedback}
-        </p>
-      </section>
+        {/* Progress bar */}
+        <div className="question-progress">
+          <div className="progress-track">
+            <div className="progress-fill" style={{ width: `${progress}%` }} />
+          </div>
+          <span className="q-label">
+            {question?.index + 1 || 1} / {question?.totalQuestions || 1}
+          </span>
+        </div>
+
+        {/* Question text */}
+        <p className="question-text">{question?.prompt || "Waiting for host…"}</p>
+
+        {/* Options */}
+        <div className="option-grid">
+          {(question?.options || []).map((option, idx) => {
+            const isSelected = selectedOption === idx;
+            const isCorrect = isSummary && summaryData.correctOptionIndex === idx;
+            const isWrong = isSummary && !isCorrect;
+
+            // percentage fill
+            let pct = 0;
+            if (isSummary) {
+              const total = summaryData.totalParticipants || 0;
+              const count = summaryData.counts?.find((c) => c.optionIndex === idx)?.count || 0;
+              pct = total > 0 ? Math.round((count / total) * 100) : 0;
+            }
+
+            let classes = `option-btn opt-${idx}`;
+            if (isCorrect) classes += " opt-correct";
+            else if (isSummary && isSelected) classes += " opt-wrong opt-selected";
+            else if (isSummary) classes += " opt-wrong";
+            else if (isSelected) classes += " opt-selected";
+
+            return (
+              <button
+                key={option}
+                className={classes}
+                onClick={() => handleSelectOption(idx)}
+                disabled={isSummary || selectedOption !== null || phase !== "question_live"}
+                type="button"
+              >
+                <span className="opt-letter">{OPTION_LETTERS[idx]}</span>
+                <span className="opt-text">{option}</span>
+                {isSummary && (
+                  <span className="opt-pct">{pct}%</span>
+                )}
+                {isCorrect && (
+                  <span className="opt-badge">✓</span>
+                )}
+                {isSummary && isSelected && !isCorrect && (
+                  <span className="opt-badge">✗</span>
+                )}
+                {isSummary && (
+                  <div
+                    className="opt-result-bar"
+                    style={{ width: `${pct}%` }}
+                  />
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Summary countdown strip */}
+        {isSummary && summaryCountdown > 0 && (
+          <div className="summary-strip">
+            <span>
+              {selectedOption === summaryData.correctOptionIndex
+                ? "✓ Correct!"
+                : selectedOption !== null
+                  ? "✗ Not quite"
+                  : "Time's up"}
+            </span>
+            <span>Next in <strong>{summaryCountdown}s</strong></span>
+          </div>
+        )}
+
+        {/* Status line */}
+        {!isSummary && (
+          <p className="status-line">
+            {phase === "question_live" && selectedOption === null && "Tap your answer before time runs out"}
+            {phase === "question_live" && selectedOption !== null && "Answer locked in — waiting for others…"}
+          </p>
+        )}
+      </div>
     </main>
   );
 }

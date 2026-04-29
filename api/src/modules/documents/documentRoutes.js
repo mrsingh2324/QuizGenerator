@@ -7,12 +7,20 @@ const {
   listDocuments,
   uploadDocumentAndAnalyze,
 } = require("./documentController");
+const { requireAdmin } = require("../../middleware/auth");
+const { aiLimiter } = require("../../middleware/rateLimiter");
 
 const router = express.Router();
 
-router.get("/", listDocuments);
-router.post("/", createDocument);
-router.post("/upload", uploadDocument.single("file"), uploadDocumentAndAnalyze);
-router.get("/:documentId", getDocumentById);
+router.get("/", requireAdmin, listDocuments);
+router.post("/", requireAdmin, createDocument);
+router.post(
+  "/upload",
+  requireAdmin,
+  aiLimiter,
+  uploadDocument.single("file"),
+  uploadDocumentAndAnalyze
+);
+router.get("/:documentId", requireAdmin, getDocumentById);
 
 module.exports = router;

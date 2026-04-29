@@ -24,11 +24,13 @@ async function generateUniqueJoinCode() {
 
 async function createLiveSession(req, res, next) {
   try {
-    const { quizId, hostId } = req.body;
+    const { quizId } = req.body;
+    // hostId comes from the authenticated user's JWT; fall back to body for legacy clients
+    const hostId = req.user?.userId || req.body.hostId;
 
     if (!quizId || !hostId) {
       return res.status(400).json({
-        message: "quizId and hostId are required",
+        message: "quizId is required",
       });
     }
 

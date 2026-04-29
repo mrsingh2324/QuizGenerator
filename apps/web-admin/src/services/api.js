@@ -1,9 +1,17 @@
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
+const TOKEN_KEY = "qz_admin_token";
+
+function getToken() {
+  return localStorage.getItem(TOKEN_KEY);
+}
 
 async function request(path, options = {}) {
+  const token = getToken();
+
   const response = await fetch(`${API_URL}${path}`, {
     headers: {
       ...(options.headers || {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     ...options,
   });
@@ -13,45 +21,21 @@ async function request(path, options = {}) {
 
   if (!response.ok) {
     const parts = [data?.message || `Request failed: ${response.status}`];
-
-    if (data?.details) {
-      parts.push(data.details);
-    }
-
+    if (data?.details) parts.push(data.details);
     throw new Error(parts.join(" "));
   }
 
   return data;
 }
 
-export async function createAdmin(payload) {
-  return request("/api/users/admins", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function ensureDemoAdmin() {
-  return request("/api/users/demo-admin");
-}
-
 export async function fetchQuizzes() {
   return request("/api/quizzes");
-}
-
-export async function fetchQuizById(quizId) {
-  return request(`/api/quizzes/${quizId}`);
 }
 
 export async function createQuiz(payload) {
   return request("/api/quizzes", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
 }
@@ -59,77 +43,17 @@ export async function createQuiz(payload) {
 export async function generateQuizFromTopic(payload) {
   return request("/api/quizzes/generate-from-topic", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
-  });
-}
-
-export async function publishQuiz(quizId) {
-  return request(`/api/quizzes/${quizId}/publish`, {
-    method: "POST",
-  });
-}
-
-export async function updateQuizSettings(quizId, payload) {
-  return request(`/api/quizzes/${quizId}/settings`, {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function fetchQuizLaunchHistory(quizId) {
-  return request(`/api/live-sessions/quiz/${quizId}/history`);
-}
-
-export async function launchQuizAgain(quizId, payload) {
-  return request(`/api/live-sessions/quiz/${quizId}/launch-again`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function fetchQuizReport(quizId) {
-  return request(`/api/live-sessions/quiz/${quizId}/report`);
-}
-
-export function getQuizReportCsvUrl(quizId) {
-  return `${API_URL}/api/live-sessions/quiz/${quizId}/report.csv`;
-}
-
-export async function updateQuestion(quizId, questionId, payload) {
-  return request(`/api/quizzes/${quizId}/questions/${questionId}`, {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function deleteQuestion(quizId, questionId) {
-  return request(`/api/quizzes/${quizId}/questions/${questionId}`, {
-    method: "DELETE",
   });
 }
 
 export async function uploadDocumentForQuiz(payload) {
   const formData = new FormData();
-  formData.append("admin", payload.admin);
   formData.append("title", payload.title);
   formData.append("file", payload.file);
 
-  if (payload.difficulty) {
-    formData.append("difficulty", payload.difficulty);
-  }
-
+  if (payload.difficulty) formData.append("difficulty", payload.difficulty);
   if (payload.count !== undefined && payload.count !== "") {
     formData.append("count", payload.count);
   }
@@ -143,9 +67,7 @@ export async function uploadDocumentForQuiz(payload) {
 export async function createLiveSession(payload) {
   return request("/api/live-sessions", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
 }
